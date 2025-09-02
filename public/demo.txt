@@ -1,0 +1,711 @@
+import React, { useEffect, useMemo, useState } from "react";
+
+/**
+ * Single-file React demo for a Juice Shop Sales Counter.
+ * Frontend-only: uses localStorage as a fake DB.
+ * Roles: admin, staff. Multiple counters supported.
+ * Pages: Login, Sales Counter, Admin Dashboard.
+ * Components: ProductList, SaleDetails, AlertMessage, ReceiptModal, StockForm, ReportTable
+ * Styling: simple inline styles + a few utility classes, no external CSS.
+ */
+
+/***********************\
+|*  Fake DB Utilities  *|
+\***********************/
+const DB_KEYS = {
+  users: "js_users",
+  products: "js_products",
+  sales: "js_sales", // each sale is a bill/receipt
+  session: "js_session",
+};
+
+const seedData = () => {
+  if (!localStorage.getItem(DB_KEYS.users)) {
+    const users = [
+      { id: "u-admin", name: "Admin", role: "admin", username: "admin", password: "admin123" },
+      // five staff counters by default
+      { id: "u-s1", name: "Counter 1", role: "staff", counter: 1, username: "c1", password: "c1" },
+      { id: "u-s2", name: "Counter 2", role: "staff", counter: 2, username: "c2", password: "c2" },
+      { id: "u-s3", name: "Counter 3", role: "staff", counter: 3, username: "c3", password: "c3" },
+      { id: "u-s4", name: "Counter 4", role: "staff", counter: 4, username: "c4", password: "c4" },
+      { id: "u-s5", name: "Counter 5", role: "staff", counter: 5, username: "c5", password: "c5" },
+    ];
+    localStorage.setItem(DB_KEYS.users, JSON.stringify(users));
+  }
+  if (!localStorage.getItem(DB_KEYS.products)) {
+    const products = [
+      {
+        id: "p-apple-250",
+        name: "Apple Juice 250ml",
+        hsn: "2202",
+        price: 41,
+        gstPct: 12,
+        stock: 12,
+        img: "https://images.unsplash.com/photo-1542444459-db63c7b0f2c6?w=600",
+        desc: "Fresh pressed apples.",
+      },
+      {
+        id: "p-orange-250",
+        name: "Orange Juice 250ml",
+        hsn: "2202",
+        price: 50,
+        gstPct: 12,
+        stock: 0,
+        img: "https://images.unsplash.com/photo-1542444592-2d3c44f5a6b2?w=600",
+        desc: "Valencia oranges, no sugar.",
+      },
+      {
+        id: "p-mango-500",
+        name: "Mango Shake 500ml",
+        hsn: "0403",
+        price: 90,
+        gstPct: 5,
+        stock: 7,
+        img: "https://images.unsplash.com/photo-1592921870986-cd3c67b45c86?w=600",
+        desc: "Alphonso mangoes & milk.",
+      },
+      {
+        id: "p-lime-100",
+        name: "Lime Soda 300ml",
+        hsn: "2202",
+        price: 41,
+        gstPct: 12,
+        stock: 5,
+        img: "https://images.unsplash.com/photo-1468465236047-6aac20937e92?w=600",
+        desc: "Sparkling, fresh lime.",
+      },
+    ];
+    localStorage.setItem(DB_KEYS.products, JSON.stringify(products));
+  }
+  if (!localStorage.getItem(DB_KEYS.sales)) {
+    localStorage.setItem(DB_KEYS.sales, JSON.stringify([]));
+  }
+};
+
+const db = {
+  getUsers: () => JSON.parse(localStorage.getItem(DB_KEYS.users) || "[]"),
+  setUsers: (u) => localStorage.setItem(DB_KEYS.users, JSON.stringify(u)),
+  getProducts: () => JSON.parse(localStorage.getItem(DB_KEYS.products) || "[]"),
+  setProducts: (p) => localStorage.setItem(DB_KEYS.products, JSON.stringify(p)),
+  getSales: () => JSON.parse(localStorage.getItem(DB_KEYS.sales) || "[]"),
+  setSales: (s) => localStorage.setItem(DB_KEYS.sales, JSON.stringify(s)),
+  getSession: () => JSON.parse(localStorage.getItem(DB_KEYS.session) || "null"),
+  setSession: (s) => localStorage.setItem(DB_KEYS.session, JSON.stringify(s)),
+  clearSession: () => localStorage.removeItem(DB_KEYS.session),
+};
+
+seedData();
+
+/***********************\
+|*     UI Helpers      *|
+\***********************/
+const pageShell = {
+  header: {
+    padding: "12px 16px",
+    borderBottom: "1px solid #e5e7eb",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  container: { maxWidth: 1200, margin: "0 auto", padding: 16 },
+  button: {
+    background: "#2563eb",
+    color: "#fff",
+    border: 0,
+    borderRadius: 10,
+    padding: "10px 14px",
+    cursor: "pointer",
+    fontWeight: 600,
+  },
+  dangerBtn: { background: "#dc2626", color: "#fff", border: 0, borderRadius: 10, padding: "8px 12px", cursor: "pointer" },
+  lightBtn: { background: "#f3f4f6", color: "#111827", border: 0, borderRadius: 10, padding: "8px 12px", cursor: "pointer" },
+  input: { padding: 10, borderRadius: 10, border: "1px solid #e5e7eb", width: "100%" },
+  card: { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, boxShadow: "0 1px 0 rgba(0,0,0,0.02)", padding: 12 },
+  grid: { display: "grid", gap: 16 },
+};
+
+function Currency({ value }) {
+  const n = Number(value || 0);
+  return <span>₹{n.toFixed(2)}</span>;
+}
+
+function AlertMessage({ type = "info", message, onClose }) {
+  if (!message) return null;
+  const bg = type === "error" ? "#fee2e2" : type === "success" ? "#dcfce7" : "#e0f2fe";
+  const color = type === "error" ? "#b91c1c" : type === "success" ? "#15803d" : "#075985";
+  return (
+    <div style={{ position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 50 }}>
+      <div style={{ background: bg, color, padding: "10px 16px", borderRadius: 10, border: `1px solid ${color}22` }}>
+        <strong style={{ marginRight: 8 }}>{type.toUpperCase()}</strong>
+        {message}
+        <button onClick={onClose} style={{ marginLeft: 12, ...pageShell.lightBtn }}>Close</button>
+      </div>
+    </div>
+  );
+}
+
+/***********************\
+|*  Auth & Routing     *|
+\***********************/
+function useSession() {
+  const [user, setUser] = useState(db.getSession());
+  const login = (username, password) => {
+    const found = db.getUsers().find((u) => u.username === username && u.password === password);
+    if (found) {
+      const session = { id: found.id, name: found.name, role: found.role, counter: found.counter };
+      db.setSession(session);
+      setUser(session);
+      return { ok: true };
+    }
+    return { ok: false, error: "Invalid credentials" };
+  };
+  const logout = () => {
+    db.clearSession();
+    setUser(null);
+  };
+  return { user, login, logout };
+}
+
+function Header({ user, onLogout }) {
+  return (
+    <div style={pageShell.header}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div style={{ width: 28, height: 28, borderRadius: 6, background: "#111827" }} />
+        <h2 style={{ margin: 0 }}>auth</h2>
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        {user && <span style={{ fontWeight: 600 }}>{user.role === "admin" ? "Admin" : `Counter ${user.counter}`}</span>}
+        {user && (
+          <button style={pageShell.lightBtn} onClick={onLogout}>
+            Logout
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/***********************\
+|* Sales Counter Page  *|
+\***********************/
+function ProductList({ products, onSelect }) {
+  const [q, setQ] = useState("");
+  const filtered = products.filter((p) => p.name.toLowerCase().includes(q.toLowerCase()) || p.hsn.includes(q));
+  return (
+    <div style={{ ...pageShell.card, height: "70vh", overflow: "auto" }}>
+      <h3 style={{ marginTop: 0 }}>Select Product</h3>
+      <input placeholder="Search by product name or HSN code" style={{ ...pageShell.input, marginBottom: 8 }} value={q} onChange={(e) => setQ(e.target.value)} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {filtered.map((p) => (
+          <div key={p.id} onClick={() => onSelect(p)} style={{ ...pageShell.card, display: "flex", alignItems: "center", gap: 12, cursor: "pointer", borderColor: "#e5e7eb" }}>
+            <img src={p.img} alt="img" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 8 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600 }}>{p.name}</div>
+              <div style={{ fontSize: 12, color: "#6b7280" }}>HSN: {p.hsn}</div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontWeight: 700 }}><Currency value={p.price} /></div>
+              <div style={{ fontSize: 12, color: p.stock > 0 ? "#059669" : "#b91c1c" }}>Stock: {p.stock}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SaleDetails({ selected, onBillNow, alertOutOfStock }) {
+  const [qty, setQty] = useState(1);
+  const [discount, setDiscount] = useState(0);
+
+  useEffect(() => { setQty(1); setDiscount(0); }, [selected?.id]);
+
+  if (!selected) return (
+    <div style={{ ...pageShell.card, minHeight: 300, display: "flex", alignItems: "center", justifyContent: "center", color: "#6b7280" }}>
+      Select a product to bill
+    </div>
+  );
+
+  if (selected.stock <= 0) {
+    return (
+      <div style={{ ...pageShell.card }}>
+        <h3 style={{ marginTop: 0 }}>Sale Details</h3>
+        <div style={{ padding: 12, background: "#fef2f2", border: "1px solid #fecaca", color: "#b91c1c", borderRadius: 10 }}>
+          Product out of stock
+        </div>
+      </div>
+    );
+  }
+
+  const mrp = selected.price;
+  const subTotal = mrp * qty;
+  const discountAmt = Math.min(discount, subTotal);
+  const taxable = Math.max(0, subTotal - discountAmt);
+  const gst = (taxable * (selected.gstPct || 0)) / 100;
+  const total = taxable + gst;
+
+  return (
+    <div style={{ ...pageShell.card }}>
+      <h3 style={{ marginTop: 0 }}>Sale Details</h3>
+      <div style={{ ...pageShell.card, background: "#f9fafb" }}>
+        <div style={{ fontWeight: 700 }}>{selected.name}</div>
+        <div style={{ fontSize: 12, color: "#6b7280" }}>MRP: <Currency value={mrp} /> | GST: {selected.gstPct}%</div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
+        <div>
+          <label style={{ fontSize: 12, color: "#6b7280" }}>Quantity</label>
+          <input type="number" min={1} max={selected.stock} value={qty} onChange={(e) => setQty(Number(e.target.value))} style={pageShell.input} />
+        </div>
+        <div>
+          <label style={{ fontSize: 12, color: "#6b7280" }}>Discount (₹)</label>
+          <input type="number" min={0} value={discount} onChange={(e) => setDiscount(Number(e.target.value))} style={pageShell.input} />
+        </div>
+      </div>
+
+      <div style={{ marginTop: 12, display: "grid", gap: 6 }}>
+        <Row label="Subtotal" value={<Currency value={subTotal} />} />
+        <Row label="Discount" value={<Currency value={-discountAmt} />} />
+        <Row label={`GST (${selected.gstPct}%)`} value={<Currency value={gst} />} />
+        <Row label={<strong>Total</strong>} value={<strong><Currency value={total} /></strong>} />
+      </div>
+
+      <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+        <button style={{ ...pageShell.button, flex: 1 }} onClick={() => onBillNow({ product: selected, qty, discount: discountAmt, totals: { subTotal, gst, total, taxable } })}>
+          Bill Now
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Row({ label, value }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
+      <div style={{ color: "#6b7280" }}>{label}</div>
+      <div>{value}</div>
+    </div>
+  );
+}
+
+function ReceiptModal({ open, bill, onClose, onConfirm }) {
+  if (!open) return null;
+  const { product, qty, discount, totals, staff, counter, mode, date } = bill;
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#0006", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60 }}>
+      <div style={{ ...pageShell.card, width: 520, background: "#fff" }}>
+        <h3 style={{ marginTop: 0, textAlign: "center" }}>Bill Receipt</h3>
+        <div style={{ fontSize: 12, color: "#6b7280", textAlign: "center" }}>{new Date(date).toLocaleString()} • Counter {counter}</div>
+        <div style={{ marginTop: 12 }}>
+          <Row label="Product" value={<span>{product.name}</span>} />
+          <Row label="Price" value={<Currency value={product.price} />} />
+          <Row label="Qty" value={qty} />
+          <Row label="Discount" value={<Currency value={-discount} />} />
+          <Row label="Taxable" value={<Currency value={totals.taxable} />} />
+          <Row label={`GST (${product.gstPct}%)`} value={<Currency value={totals.gst} />} />
+          <Row label={<strong>Total</strong>} value={<strong><Currency value={totals.total} /></strong>} />
+          <Row label="Bill Mode" value={mode} />
+          <Row label="Billed By" value={`${staff} (C${counter})`} />
+        </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+          <button style={{ ...pageShell.lightBtn, flex: 1 }} onClick={onClose}>Cancel</button>
+          <button style={{ ...pageShell.button, flex: 1 }} onClick={onConfirm}>Confirm & Save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SalesCounterPage({ session, onLogout }) {
+  const [products, setProducts] = useState(db.getProducts());
+  const [selected, setSelected] = useState(null);
+  const [alert, setAlert] = useState(null);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [pendingBill, setPendingBill] = useState(null);
+
+  const handleSelect = (p) => {
+    setSelected(p);
+    if (p.stock <= 0) setAlert({ type: "error", message: "Product out of stock" });
+  };
+
+  const onBillNow = ({ product, qty, discount, totals }) => {
+    const bill = {
+      id: `bill-${Date.now()}`,
+      productId: product.id,
+      product,
+      qty,
+      discount,
+      totals,
+      staff: session.name,
+      staffId: session.id,
+      counter: session.counter,
+      mode: "Cash",
+      date: new Date().toISOString(),
+    };
+    setPendingBill(bill);
+    setReceiptOpen(true);
+  };
+
+  const onConfirm = () => {
+    // save bill
+    const sales = db.getSales();
+    sales.push(pendingBill);
+    db.setSales(sales);
+    // reduce stock
+    const prods = db.getProducts();
+    const idx = prods.findIndex((x) => x.id === pendingBill.productId);
+    if (idx >= 0) {
+      prods[idx].stock -= pendingBill.qty;
+      db.setProducts(prods);
+      setProducts(prods);
+    }
+    setReceiptOpen(false);
+    // print
+    setTimeout(() => {
+      const w = window.open("", "_blank");
+      w.document.write(renderPrintableReceipt(pendingBill));
+      w.document.close();
+      w.focus();
+      w.print();
+      w.close();
+    }, 50);
+    setAlert({ type: "success", message: "Bill saved & printed" });
+    setSelected(null);
+  };
+
+  return (
+    <div>
+      <Header user={session} onLogout={onLogout} />
+      <div style={pageShell.container}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          <ProductList products={products} onSelect={handleSelect} />
+          <div>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+              <button style={pageShell.lightBtn} onClick={() => {
+                const today = new Date().toISOString().slice(0, 10);
+                const todays = db.getSales().filter((s) => s.date.startsWith(today));
+                const csv = toCSV(todays);
+                downloadFile(`sales-${today}-counter${session.counter}.csv`, csv);
+              }}>Download Today's Report</button>
+            </div>
+            <SaleDetails selected={selected} onBillNow={onBillNow} />
+          </div>
+        </div>
+      </div>
+      <AlertMessage {...alert} onClose={() => setAlert(null)} />
+      <ReceiptModal open={receiptOpen} bill={pendingBill} onClose={() => setReceiptOpen(false)} onConfirm={onConfirm} />
+    </div>
+  );
+}
+
+/***********************\
+|*    Admin Pages      *|
+\***********************/
+function AdminDashboard({ session, onLogout }) {
+  const [tab, setTab] = useState("staff");
+  return (
+    <div>
+      <Header user={session} onLogout={onLogout} />
+      <div style={pageShell.container}>
+        <div style={{ ...pageShell.card, marginBottom: 12 }}>
+          <div style={{ display: "flex", gap: 8 }}>
+            <Tab label="Register Staff" id="staff" active={tab === "staff"} onClick={() => setTab("staff")} />
+            <Tab label="Manage Stock" id="stock" active={tab === "stock"} onClick={() => setTab("stock")} />
+            <Tab label="Download Reports" id="reports" active={tab === "reports"} onClick={() => setTab("reports")} />
+          </div>
+        </div>
+        {tab === "staff" && <StaffRegister />}
+        {tab === "stock" && <ManageStock />}
+        {tab === "reports" && <ReportsPage />}
+      </div>
+    </div>
+  );
+}
+
+function Tab({ label, active, onClick }) {
+  return (
+    <button onClick={onClick} style={{ ...pageShell.lightBtn, padding: "10px 14px", border: active ? "2px solid #2563eb" : "1px solid #e5e7eb", background: active ? "#eff6ff" : "#f9fafb", fontWeight: 700 }}>{label}</button>
+  );
+}
+
+function StaffRegister() {
+  const [users, setUsers] = useState(db.getUsers());
+  const [name, setName] = useState("");
+  const [counter, setCounter] = useState(1);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+
+  const add = () => {
+    const u = { id: `u-${Date.now()}`, name, role: "staff", counter: Number(counter), username, password };
+    const updated = [...users, u];
+    setUsers(updated);
+    db.setUsers(updated);
+    setName(""); setCounter(1); setUsername(""); setPassword("");
+  };
+
+  return (
+    <div style={pageShell.card}>
+      <h3 style={{ marginTop: 0 }}>Create Sales Counter Person</h3>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div>
+          <label>Name</label>
+          <input style={pageShell.input} value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div>
+          <label>Counter #</label>
+          <input type="number" min={1} style={pageShell.input} value={counter} onChange={(e) => setCounter(e.target.value)} />
+        </div>
+        <div>
+          <label>Username</label>
+          <input style={pageShell.input} value={username} onChange={(e) => setUsername(e.target.value)} />
+        </div>
+        <div>
+          <label>Password</label>
+          <input type="password" style={pageShell.input} value={password} onChange={(e) => setPassword(e.target.value)} />
+        </div>
+      </div>
+      <div style={{ marginTop: 12 }}>
+        <button style={pageShell.button} onClick={add}>Create Staff</button>
+      </div>
+      <div style={{ marginTop: 16 }}>
+        <h4>Existing Staff</h4>
+        <ul>
+          {users.filter(u=>u.role==="staff").map((u) => (
+            <li key={u.id}>{u.name} — Counter {u.counter} — {u.username}</li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function ManageStock() {
+  const [products, setProducts] = useState(db.getProducts());
+  const [form, setForm] = useState({ id: "", name: "", price: 0, gstPct: 0, stock: 0, hsn: "", img: "", desc: "" });
+
+  const save = () => {
+    let next = [...products];
+    if (!form.id) {
+      const p = { ...form, id: `p-${Date.now()}`, price: Number(form.price), gstPct: Number(form.gstPct), stock: Number(form.stock) };
+      next.push(p);
+    } else {
+      const i = next.findIndex((x) => x.id === form.id);
+      if (i >= 0) next[i] = { ...form, price: Number(form.price), gstPct: Number(form.gstPct), stock: Number(form.stock) };
+    }
+    setProducts(next);
+    db.setProducts(next);
+    setForm({ id: "", name: "", price: 0, gstPct: 0, stock: 0, hsn: "", img: "", desc: "" });
+  };
+  const edit = (p) => setForm(p);
+  const del = (id) => {
+    const next = products.filter((p) => p.id !== id);
+    setProducts(next);
+    db.setProducts(next);
+  };
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      <div style={pageShell.card}>
+        <h3 style={{ marginTop: 0 }}>{form.id ? "Update Product" : "Add Product"}</h3>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <input placeholder="Name" style={pageShell.input} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <input placeholder="HSN" style={pageShell.input} value={form.hsn} onChange={(e) => setForm({ ...form, hsn: e.target.value })} />
+          <input type="number" placeholder="Price" style={pageShell.input} value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
+          <input type="number" placeholder="GST %" style={pageShell.input} value={form.gstPct} onChange={(e) => setForm({ ...form, gstPct: e.target.value })} />
+          <input type="number" placeholder="Stock" style={pageShell.input} value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
+          <input placeholder="Image URL" style={pageShell.input} value={form.img} onChange={(e) => setForm({ ...form, img: e.target.value })} />
+          <input placeholder="Description" style={{ ...pageShell.input, gridColumn: "1 / span 2" }} value={form.desc} onChange={(e) => setForm({ ...form, desc: e.target.value })} />
+        </div>
+        <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+          <button style={pageShell.button} onClick={save}>{form.id ? "Update" : "Add"}</button>
+          {form.id && <button style={pageShell.lightBtn} onClick={()=>setForm({ id: "", name: "", price: 0, gstPct: 0, stock: 0, hsn: "", img: "", desc: "" })}>Cancel</button>}
+        </div>
+      </div>
+      <div style={pageShell.card}>
+        <h3 style={{ marginTop: 0 }}>Available Stock</h3>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              <th style={th}>Name</th><th style={th}>HSN</th><th style={th}>Price</th><th style={th}>GST%</th><th style={th}>Stock</th><th style={th}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {products.map((p)=> (
+              <tr key={p.id}>
+                <td style={td}>{p.name}</td>
+                <td style={td}>{p.hsn}</td>
+                <td style={td}><Currency value={p.price} /></td>
+                <td style={td}>{p.gstPct}</td>
+                <td style={td}>{p.stock}</td>
+                <td style={{ ...td }}>
+                  <div style={{ display:"flex", gap:8 }}>
+                    <button style={pageShell.lightBtn} onClick={()=>edit(p)}>Edit</button>
+                    <button style={pageShell.dangerBtn} onClick={()=>del(p.id)}>Delete</button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+const th = { textAlign: "left", borderBottom: "1px solid #e5e7eb", padding: 8, fontSize: 12, color: "#6b7280" };
+const td = { borderBottom: "1px solid #f3f4f6", padding: 8 };
+
+function ReportsPage() {
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0,10));
+  const sales = db.getSales().filter(s => s.date.startsWith(date));
+  return (
+    <div style={pageShell.card}>
+      <h3 style={{ marginTop: 0 }}>Daily Sales Report</h3>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+        <input type="date" value={date} onChange={(e)=>setDate(e.target.value)} style={pageShell.input} />
+        <button style={pageShell.button} onClick={()=> downloadFile(`sales-${date}.csv`, toCSV(sales))}>Download CSV</button>
+      </div>
+      <ReportTable rows={sales} />
+    </div>
+  );
+}
+
+function ReportTable({ rows }) {
+  const total = rows.reduce((acc, r) => acc + (r.totals?.total || 0), 0);
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <thead>
+          <tr>
+            <th style={th}>Date/Time</th>
+            <th style={th}>Counter</th>
+            <th style={th}>Staff</th>
+            <th style={th}>Product</th>
+            <th style={th}>Qty</th>
+            <th style={th}>Taxable</th>
+            <th style={th}>GST</th>
+            <th style={th}>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r)=> (
+            <tr key={r.id}>
+              <td style={td}>{new Date(r.date).toLocaleString()}</td>
+              <td style={td}>C{r.counter}</td>
+              <td style={td}>{r.staff}</td>
+              <td style={td}>{r.product.name}</td>
+              <td style={td}>{r.qty}</td>
+              <td style={td}><Currency value={r.totals.taxable} /></td>
+              <td style={td}><Currency value={r.totals.gst} /></td>
+              <td style={{ ...td, fontWeight: 700 }}><Currency value={r.totals.total} /></td>
+            </tr>
+          ))}
+          <tr>
+            <td style={{ ...td }} colSpan={7}><strong>Grand Total</strong></td>
+            <td style={{ ...td, fontWeight: 700 }}><Currency value={total} /></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/***********************\
+|*     Login Page      *|
+\***********************/
+function LoginPage({ onLogin }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const submit = (e) => {
+    e.preventDefault();
+    const res = onLogin(username, password);
+    if (!res.ok) setError(res.error);
+  };
+  return (
+    <div>
+      <Header />
+      <div style={{ ...pageShell.container, maxWidth: 420 }}>
+        <div style={{ ...pageShell.card }}>
+          <h3 style={{ marginTop: 0 }}>Login</h3>
+          <form onSubmit={submit}>
+            <div style={{ display: "grid", gap: 12 }}>
+              <input placeholder="Username" style={pageShell.input} value={username} onChange={(e) => setUsername(e.target.value)} />
+              <input type="password" placeholder="Password" style={pageShell.input} value={password} onChange={(e) => setPassword(e.target.value)} />
+              {!!error && <div style={{ color: "#b91c1c", fontSize: 13 }}>{error}</div>}
+              <button type="submit" style={pageShell.button}>Sign In</button>
+            </div>
+          </form>
+          <div style={{ color: "#6b7280", fontSize: 12, marginTop: 12 }}>
+            Demo users: admin/admin123 • c1/c1 • c2/c2 • c3/c3 …
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/***********************\
+|*     Utilities       *|
+\***********************/
+function toCSV(rows) {
+  const header = ["date","counter","staff","product","qty","price","discount","taxable","gst","total"];
+  const all = [header.join(",")];
+  rows.forEach(r => {
+    all.push([
+      new Date(r.date).toLocaleString(),
+      r.counter,
+      r.staff,
+      r.product.name,
+      r.qty,
+      r.product.price,
+      r.discount,
+      r.totals.taxable,
+      r.totals.gst,
+      r.totals.total,
+    ].join(","));
+  });
+  return all.join("\n");
+}
+
+function downloadFile(filename, text) {
+  const blob = new Blob([text], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function renderPrintableReceipt(bill) {
+  const css = `
+    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 24px; }
+    .row { display:flex; justify-content: space-between; margin: 6px 0; }
+    .muted { color:#6b7280; font-size: 12px; }
+  `;
+  return `<!doctype html><html><head><meta charset="utf-8"/><title>Receipt ${bill.id}</title><style>${css}</style></head><body>
+    <h2 style="margin:0;">Juice Shop</h2>
+    <div class="muted">${new Date(bill.date).toLocaleString()} • Counter ${bill.counter}</div>
+    <hr />
+    <div class="row"><div>Product</div><div>${bill.product.name}</div></div>
+    <div class="row"><div>Price</div><div>₹${bill.product.price.toFixed(2)}</div></div>
+    <div class="row"><div>Qty</div><div>${bill.qty}</div></div>
+    <div class="row"><div>Discount</div><div>-₹${bill.discount.toFixed(2)}</div></div>
+    <div class="row"><div>Taxable</div><div>₹${bill.totals.taxable.toFixed(2)}</div></div>
+    <div class="row"><div>GST (${bill.product.gstPct}%)</div><div>₹${bill.totals.gst.toFixed(2)}</div></div>
+    <div class="row" style="font-weight:700"><div>Total</div><div>₹${bill.totals.total.toFixed(2)}</div></div>
+    <hr />
+    <div class="muted">Bill Mode: ${bill.mode} • Billed By: ${bill.staff} (C${bill.counter})</div>
+  </body></html>`;
+}
+
+/***********************\
+|*       App          *|
+\***********************/
+
+export default function App() {
+  const { user, login, logout } = useSession();
+
+  if (!user) return <LoginPage onLogin={login} />;
+  if (user.role === "admin") return <AdminDashboard session={user} onLogout={logout} />;
+  return <SalesCounterPage session={user} onLogout={logout} />;
+}
