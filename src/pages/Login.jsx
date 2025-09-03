@@ -56,7 +56,7 @@ export default function LoginPage({ onLogin }) {
           </form>
 
           <div style={{ color: "#6b7280", fontSize: 12, marginTop: 12 }}>
-            Demo users: <b>admin/admin123</b> • <b>c1/c1</b> • <b>c2/c2</b> •{" "}
+            Demo users:• <b>c1/c1</b> • <b>c2/c2</b> •{" "}
             <b>c3/c3</b> …
           </div>
         </div>
