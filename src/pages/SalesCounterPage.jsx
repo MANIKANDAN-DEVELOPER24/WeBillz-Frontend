@@ -1,5 +1,3 @@
-
-
 import { useState, useEffect } from "react";
 import Header from "../components/Header";
 import ProductList from "../components/ProductList";
@@ -8,7 +6,7 @@ import AlertMessage from "../components/AlertMessage";
 import ReceiptModal from "../components/ReceiptModal";
 import { pageShell } from "../utils/styles";
 import { renderPrintableReceipt } from "../utils/helpers";
-import api from "../api/api"; // ✅ use configured axios (Django backend)
+import api from "../api/api"; //  use configured axios (Django backend)
 
 export default function SalesCounterPage({ session, onLogout }) {
   const [products, setProducts] = useState([]);
@@ -17,7 +15,7 @@ export default function SalesCounterPage({ session, onLogout }) {
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [pendingBill, setPendingBill] = useState(null);
 
-  // ✅ Fetch products from backend (authorized)
+  //  Fetch products from backend (authorized)
   useEffect(() => {
     const fetchProducts = async () => {
       try {
@@ -68,17 +66,17 @@ export default function SalesCounterPage({ session, onLogout }) {
         mode: pendingBill.mode, // e.g., "Cash"
       };
 
-      // ✅ Save sale
+      //  Save sale
       const resSale = await api.post("/sales/", payload);
 
-      // ✅ Update product list
+      // Update product list
       const resProducts = await api.get("/products/");
       setProducts(resProducts.data);
 
       // Close receipt modal
       setReceiptOpen(false);
 
-      // ✅ Print receipt
+      //  Print receipt
       const w = window.open("", "_blank");
       if (w) {
         w.document.write(renderPrintableReceipt(resSale.data));

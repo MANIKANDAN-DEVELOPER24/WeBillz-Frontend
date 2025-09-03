@@ -1,5 +1,3 @@
-
-
 import { useEffect, useState } from "react";
 import { pageShell } from "../utils/styles";
 import Currency from "./Currency";

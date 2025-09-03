@@ -1,6 +1,5 @@
-
 import Currency from "./Currency";
-import { td, th } from "../utils/styles"; 
+import { td, th } from "../utils/styles";
 
 export default function ReportTable({ rows }) {
   const total = rows.reduce((acc, r) => acc + (r.totals?.total || 0), 0);

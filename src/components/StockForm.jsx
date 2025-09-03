@@ -1,4 +1,3 @@
-
 import { pageShell } from "../utils/styles";
 
 export default function StockForm({ form, setForm, onSave, onCancel }) {

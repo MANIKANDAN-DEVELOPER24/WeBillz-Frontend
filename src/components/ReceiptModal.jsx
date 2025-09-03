@@ -1,6 +1,3 @@
-
-
-
 import { pageShell } from "../utils/styles";
 import Currency from "./Currency";
 import api from "../api/api";  

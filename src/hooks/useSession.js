@@ -1,6 +1,5 @@
-
 import { useState, useEffect } from "react";
-import api from "../api/api"; // axios client we made
+import api from "../api/api"; // axios client
 
 export default function useSession() {
   const [user, setUser] = useState(() => {
